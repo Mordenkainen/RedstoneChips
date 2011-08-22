@@ -1,6 +1,8 @@
 
 package org.tal.redstonechips.command;
 
+import java.util.List;
+import java.util.ArrayList;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
 import org.bukkit.command.Command;
@@ -20,8 +22,8 @@ public class RCarg extends RCCommand {
         if (player==null) return true;
 
         Block target = CommandUtils.targetBlock(player);
-        Circuit c = rc.getCircuitManager().getCircuitByStructureBlock(target);
-        if (c==null) {
+        List<Circuit> circuitlist = rc.getCircuitManager().getCircuitByStructureBlock(target);
+        if (circuitlist==null) {
             player.sendMessage(rc.getPrefs().getErrorColor() + "You need to point at a block of the circuit you wish to reset.");
             return true;
         }
@@ -31,25 +33,28 @@ public class RCarg extends RCCommand {
             return true;
         }
 
-        String[] args = new String[c.args.length];
-        System.arraycopy(c.args, 0, args, 0, args.length);
+        List<Circuit> circuitListCopy = new ArrayList<Circuit>(circuitlist);
+        for (Circuit c : circuitListCopy) {
+            String[] args = new String[c.args.length];
+            System.arraycopy(c.args, 0, args, 0, args.length);
 
-        for (int i=0; i<cmdArgs.length; i+=2) {
-            String[] editArgs = this.editArgs(sender, args, cmdArgs[i], cmdArgs[i+1]);
-            if (editArgs!=null) args = editArgs;
-        }
+            for (int i=0; i<cmdArgs.length; i+=2) {
+                String[] editArgs = this.editArgs(sender, args, cmdArgs[i], cmdArgs[i+1]);
+                if (editArgs!=null) args = editArgs;
+            }
 
-        String oldArgs[] = new String[c.args.length];
-        System.arraycopy(c.args, 0, oldArgs, 0, oldArgs.length);
+            String oldArgs[] = new String[c.args.length];
+            System.arraycopy(c.args, 0, oldArgs, 0, oldArgs.length);
 
-        editSignArgs(c, args);
+            editSignArgs(c, args);
 
-        if (!rc.getCircuitManager().resetCircuit(c, sender)) {
-            sender.sendMessage(rc.getPrefs().getErrorColor() + "Could not reactivate circuit with new sign arguments. ");
+            if (!rc.getCircuitManager().resetCircuit(c, sender)) {
+                sender.sendMessage(rc.getPrefs().getErrorColor() + "Could not reactivate circuit with new sign arguments. ");
 
-            // revert to old args.
-            editSignArgs(c, oldArgs);
-            rc.getCircuitManager().resetCircuit(c, sender);
+                // revert to old args.
+                editSignArgs(c, oldArgs);
+                rc.getCircuitManager().resetCircuit(c, sender);
+            }
         }
 
         return true;

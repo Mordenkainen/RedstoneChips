@@ -22,6 +22,7 @@ import org.bukkit.material.Lever;
 import org.bukkit.material.MaterialData;
 import org.bukkit.material.Redstone;
 import org.tal.redstonechips.circuit.InputPin;
+import org.tal.redstonechips.circuit.OutputPin;
 import org.tal.redstonechips.util.ChunkLocation;
 import org.tal.redstonechips.util.Locations;
 
@@ -92,8 +93,8 @@ public class CircuitManager {
 
     private Map<ChunkLocation, List<Circuit>> chunkLookupMap = new HashMap<ChunkLocation, List<Circuit>>();
     private Map<Location, List<InputPin>> inputLookupMap = new HashMap<Location, List<InputPin>>();
-    private Map<Location, Object[]> outputLookupMap = new HashMap<Location, Object[]>();
-    private Map<Location, Circuit> structureLookupMap = new HashMap<Location, Circuit>();
+    private Map<Location, OutputPin> outputLookupMap = new HashMap<Location, OutputPin>();
+    private Map<Location, List<Circuit>> structureLookupMap = new HashMap<Location, List<Circuit>>();
     private Map<Location, Circuit> activationLookupMap = new HashMap<Location, Circuit>();
 
     private List<CommandSender> pausedDebuggers;
@@ -169,6 +170,10 @@ public class CircuitManager {
         }
 
         Material chipMaterial = firstChipBlock.getType();
+        if (structureLookupMap.containsKey(firstChipBlock.getLocation())) {
+            if (sender!=null) sender.sendMessage(rc.getPrefs().getErrorColor() + "Chips may not share chip blocks!");
+            return -2;
+        }
         structure.add(firstChipBlock);
 
         try {
@@ -227,9 +232,13 @@ public class CircuitManager {
             c.inputs[i] = new InputPin(c, inputs.get(i).getLocation(), i);
         }
 
-        c.outputs = new Location[outputs.size()];
+        c.outputs = new OutputPin[outputs.size()];
         for (int i=0; i<outputs.size(); i++) {
-            c.outputs[i] = outputs.get(i).getLocation();
+            OutputPin newOutput = getOutputPin(outputs.get(i).getLocation());
+            if (newOutput == null) {
+                newOutput = new OutputPin(outputs.get(i).getLocation(), c.world, rc);
+            }
+            c.outputs[i] = newOutput;
         }
 
         c.interfaceBlocks = new Location[interfaceBlocks.size()];
@@ -254,6 +263,13 @@ public class CircuitManager {
      * @return The circuit's id or -2 if an error occurred.
      */
     public int activateCircuit(Circuit c, CommandSender sender, String[] signargs, int id) {
+        for (int i=0; i<c.outputs.length; i++) {
+            OutputPin newOutput = getOutputPin(c.outputs[i].getOutputBlock());
+            if (!outputLookupMap.containsKey(c.outputs[i].getOutputBlock())) {
+                outputLookupMap.put(c.outputs[i].getOutputBlock(), c.outputs[i]);
+            }
+            c.outputs[i].addOutputCircuit(c, i);
+        }
         if (c.initCircuit(sender, signargs, rc)) {
             this.addCircuitLookups(c);
 
@@ -277,6 +293,12 @@ public class CircuitManager {
 
             return c.id;
         } else {
+            for (OutputPin l : c.outputs) {
+                l.removeOutputCircuit(c);
+                if (l.isEmpty()) {
+                    outputLookupMap.remove(l);
+                }
+            }
             if (sender!=null)
                 sender.sendMessage(rc.getPrefs().getErrorColor() + c.getClass().getSimpleName() + " was not activated.");
             return -2;
@@ -284,17 +306,21 @@ public class CircuitManager {
     }
 
     /**
-     * Checks whether the block b is part of a circuit and if so deactivates the circuit.
+     * Checks whether the block b is part of a circuit and if so deactivates the circuit(s).
      *
      * @param b The block that was broken.
      * @param s The breaker. Can be null.
      */
     public void checkCircuitDestroyed(Block b, CommandSender s) {
-        Circuit destroyed = structureLookupMap.get(b.getLocation());
-
-        if (destroyed!=null && circuits.containsValue(destroyed)) {
-            if (s!=null) s.sendMessage(rc.getPrefs().getErrorColor() + "You destroyed the " + destroyed.getClass().getSimpleName() + "(" + destroyed.id + ") chip.");
-            destroyCircuit(destroyed, s, false);
+        List<Circuit> destroyed = structureLookupMap.get(b.getLocation());
+        if (destroyed!=null) {
+            List<Circuit> destroyedCopy = new ArrayList<Circuit>(destroyed);
+            for (Circuit todestroy : destroyedCopy) {
+                if (circuits.containsValue(todestroy)) {
+                    if (s!=null) s.sendMessage(rc.getPrefs().getErrorColor() + "You destroyed the " + todestroy.getClass().getSimpleName() + "(" + todestroy.id + ") chip.");
+                    destroyCircuit(todestroy, s, false);
+                }
+            }
         }
     }
 
@@ -343,18 +369,11 @@ public class CircuitManager {
         circuits.remove(destroyed.id);
         removeCircuitLookups(destroyed);
 
-        for (Location l : destroyed.outputs) {
-            Block output = destroyed.world.getBlockAt(l);
-
-            if (output.getType()==Material.LEVER) {
-                // turn lever off
-                output.setData((byte)(output.getData()&0x7));
-            }
-        }
-
         if (destroyBlocks) {
-            for (Location l : destroyed.structure)
-                destroyed.world.getBlockAt(l).setType(Material.AIR);
+            for (Location l : destroyed.structure) {
+                if (!structureLookupMap.containsKey(l))
+                    destroyed.world.getBlockAt(l).setType(Material.AIR);
+            }
         } else {
             destroyed.updateCircuitSign(false);
         }
@@ -527,7 +546,7 @@ public class CircuitManager {
         circuitChunks.add(ChunkLocation.fromLocation(c.activationBlock));
 
         for (int i=0; i<c.outputs.length; i++) {
-            ChunkLocation chunk = ChunkLocation.fromLocation(c.outputs[i]);
+            ChunkLocation chunk = ChunkLocation.fromLocation(c.outputs[i].getOutputBlock());
 
             if (!circuitChunks.contains(chunk))
                 circuitChunks.add(chunk);
@@ -572,7 +591,7 @@ public class CircuitManager {
      * @param structureBlock Any block that belongs to a chip.
      * @return The circuit that the block is part of its structure.
      */
-    public Circuit getCircuitByStructureBlock(Block structureBlock) {
+    public List<Circuit> getCircuitByStructureBlock(Block structureBlock) {
         return this.structureLookupMap.get(structureBlock.getLocation());
     }
 
@@ -598,8 +617,14 @@ public class CircuitManager {
         return this.inputLookupMap.get(inputBlock.getLocation());
     }
 
-    public Object[] lookupOutputBlock(Block outputBlock) {
+    public OutputPin lookupOutputBlock(Block outputBlock) {
         return this.outputLookupMap.get(outputBlock.getLocation());
+    }
+
+    public OutputPin getOutputPin(Location output) {
+        OutputPin newOutput = null;
+        newOutput = this.outputLookupMap.get(output);
+        return newOutput;
     }
 
     public boolean isDebuggerPaused(CommandSender s) {
@@ -647,6 +672,7 @@ public class CircuitManager {
         Block up = origin.getFace(BlockFace.UP);
 
         if (!params.structure.contains(up) && up.getType()==params.chipMaterial) {
+            if (structureLookupMap.containsKey(up.getLocation())) throw new IllegalArgumentException("Chips may not share chip blocks!");
             params.structure.add(up);
             params.direction = direction;
             params.origin = up;
@@ -657,6 +683,7 @@ public class CircuitManager {
         Block down = origin.getFace(BlockFace.DOWN);
 
         if (!params.structure.contains(down) && down.getType()==params.chipMaterial) {
+            if (structureLookupMap.containsKey(down.getLocation())) throw new IllegalArgumentException("Chips may not share chip blocks!");
             params.structure.add(down);
             params.direction = direction;
             params.origin = down;
@@ -712,10 +739,11 @@ public class CircuitManager {
         }
     }
 
-    private void checkForChipBlockOnSideFace(ScanParameters params) {
+   private void checkForChipBlockOnSideFace(ScanParameters params) {
         Block b = params.origin.getFace(params.direction);
         if (!params.structure.contains(b)) {
             if (b.getType()==params.chipMaterial) {
+                if (structureLookupMap.containsKey(b.getLocation())) throw new IllegalArgumentException("Chips may not share chip blocks!");
                 params.structure.add(b);
                 Block origin = params.origin;
                 params.origin = b;
@@ -778,11 +806,11 @@ public class CircuitManager {
     }
 
     private void addCircuitLookups(Circuit c) {
-        for (int i=0; i<c.structure.length; i++)
-            structureLookupMap.put(c.structure[i], c);
+        for (int i=0; i<c.structure.length; i++) {
+            if (!structureLookupMap.containsKey(c.structure[i]))
+                structureLookupMap.put(c.structure[i], new ArrayList<Circuit>());
 
-        for (int i=0; i<c.outputs.length; i++) {
-            outputLookupMap.put(c.outputs[i], new Object[]{c, i});
+            structureLookupMap.get(c.structure[i]).add(c);
         }
 
         activationLookupMap.put(c.activationBlock, c);
@@ -804,11 +832,31 @@ public class CircuitManager {
     }
 
     private void removeCircuitLookups(Circuit c) {
-        for (Location l : c.structure)
+        List<Location> structuretoRemove = new ArrayList<Location>();
+        for (Location l : c.structure) {
+            if (structureLookupMap.containsKey(l)) {
+                List<Circuit> circuitstoRemove = new ArrayList<Circuit>();
+                List<Circuit> structcircuits = structureLookupMap.get(l);
+                for (Circuit curcircuit : structcircuits) {
+                    if (curcircuit == c) {
+                        circuitstoRemove.add(c);
+                    }
+                }
+                structcircuits.removeAll(circuitstoRemove);
+                if (structcircuits.isEmpty())
+                    structuretoRemove.add(l);
+            }
+        }
+        
+        for (Location l : structuretoRemove)
             structureLookupMap.remove(l);
-
-        for (Location l : c.outputs)
-            outputLookupMap.remove(l);
+        
+        for (OutputPin l : c.outputs) {
+            l.removeOutputCircuit(c);
+            if (l.isEmpty()) {
+                outputLookupMap.remove(l);
+            }
+        }
 
         List<Location> inputBlocksToRemove = new ArrayList<Location>();
         for (Location l : inputLookupMap.keySet()) {

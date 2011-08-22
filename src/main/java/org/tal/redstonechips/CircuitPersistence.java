@@ -18,6 +18,7 @@ import java.util.logging.Level;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.tal.redstonechips.circuit.InputPin;
+import org.tal.redstonechips.circuit.OutputPin;
 import org.tal.redstonechips.util.ChunkLocation;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -136,7 +137,7 @@ public class CircuitPersistence {
         map.put("activationBlock", makeBlockList(c.activationBlock));
         map.put("chunk", makeChunksList(c.circuitChunks));
         map.put("inputs", makeInputPinsList(c.inputs));
-        map.put("outputs", makeBlockListsList(c.outputs));
+        map.put("outputs", makeOutputPinsList(c.outputs));
         map.put("interfaces", makeBlockListsList(c.interfaceBlocks));
         map.put("structure", makeBlockListsList(c.structure));
         map.put("signArgs", c.args);
@@ -153,10 +154,10 @@ public class CircuitPersistence {
         Circuit c = rc.getCircuitLoader().getCircuitInstance(className);
         c.world = world;
         c.activationBlock = getLocation(world, (List<Integer>)map.get("activationBlock"));
-        c.outputs = getLocationArray(world, (List<List<Integer>>)map.get("outputs"));
         c.interfaceBlocks = getLocationArray(world, (List<List<Integer>>)map.get("interfaces"));
         c.structure = getLocationArray(world, (List<List<Integer>>)map.get("structure"));
         c.inputs = getInputPinsArray((List<List<Integer>>)map.get("inputs"), c);
+        c.outputs = getOutputPinsArray((List<List<Integer>>)map.get("outputs"), c);
         
         if (map.containsKey("chunks")) {
             c.circuitChunks = getChunkLocations(world, (List<List<Integer>>)map.get("chunks"));
@@ -206,6 +207,13 @@ public class CircuitPersistence {
             list.add(makeBlockList(p.getInputBlock()));
         return list;
     }
+    
+    private Object makeOutputPinsList(OutputPin[] outputs) {
+        List<List<Integer>> list = new ArrayList<List<Integer>>();
+        for (OutputPin p : outputs)
+            list.add(makeBlockList(p.getOutputBlock()));
+        return list;
+    }
 
     private Object makeBlockListsList(Location[] vs) {
         List<List<Integer>> list = new ArrayList<List<Integer>>();
@@ -251,6 +259,20 @@ public class CircuitPersistence {
         }
 
         return inputs.toArray(new InputPin[inputs.size()]);
+    }
+    
+    private OutputPin[] getOutputPinsArray(List<List<Integer>> list, Circuit c) {
+        List<OutputPin> outputs = new ArrayList<OutputPin>();
+        for (int i=0; i<list.size(); i++) {
+            List<Integer> coords = list.get(i);
+            OutputPin newOutput = rc.getCircuitManager().getOutputPin(new Location(c.world, coords.get(0), coords.get(1), coords.get(2)));
+            if (newOutput == null) {
+                newOutput = new OutputPin(new Location(c.world, coords.get(0), coords.get(1), coords.get(2)), c.world, rc);
+            }
+            outputs.add(newOutput);
+        }
+
+        return outputs.toArray(new OutputPin[outputs.size()]);
     }
 
     private void backupCircuitsFile() {

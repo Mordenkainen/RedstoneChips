@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.Iterator;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -77,7 +78,7 @@ public class RedstoneChips extends JavaPlugin {
 
     public static List<CircuitIndex> circuitLibraries = new ArrayList<CircuitIndex>();
 
-    public Map<Location, rcTypeReceiver> rcTypeReceivers = new HashMap<Location, rcTypeReceiver>();
+    public Map<Location, List<rcTypeReceiver>> rcTypeReceivers = new HashMap<Location, List<rcTypeReceiver>>();
     public Map<String, BroadcastChannel> broadcastChannels = new HashMap<String, BroadcastChannel>();
 
     public RCsel rcsel = new RCsel();
@@ -325,7 +326,10 @@ public class RedstoneChips extends JavaPlugin {
      * @param circuit The circuit that will receive the typed text.
      */
     public void registerRcTypeReceiver(Location typingBlock, rcTypeReceiver circuit) {
-        rcTypeReceivers.put(typingBlock, circuit);
+        if (!rcTypeReceivers.containsKey(typingBlock))
+                rcTypeReceivers.put(typingBlock, new ArrayList<rcTypeReceiver>());
+
+            rcTypeReceivers.get(typingBlock).add(circuit);
     }
 
     /**
@@ -333,15 +337,16 @@ public class RedstoneChips extends JavaPlugin {
      * @param circuit The rcTypeReceiver to remove.
      */
     public void removeRcTypeReceiver(rcTypeReceiver circuit) {
-        List<Location> toremove = new ArrayList<Location>();
-
-        for (Location l : rcTypeReceivers.keySet()) {
-            if (rcTypeReceivers.get(l)==circuit)
-                toremove.add(l);
+        Iterator oIter = rcTypeReceivers.keySet().iterator();
+        while(oIter.hasNext()) {
+            List<rcTypeReceiver> receivers = rcTypeReceivers.get((Location)oIter.next());
+            Iterator iIter = receivers.iterator();
+            while(iIter.hasNext()) {
+                rcTypeReceiver receiver = (rcTypeReceiver)iIter.next();
+                if (receiver == circuit) iIter.remove();
+            }
+            if (receivers.isEmpty()) oIter.remove();
         }
-
-        for (Location l : toremove)
-            rcTypeReceivers.remove(l);
     }
 
     /**

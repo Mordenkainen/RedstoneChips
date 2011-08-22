@@ -3,6 +3,7 @@ package org.tal.redstonechips.command;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -41,12 +42,12 @@ public class CommandUtils {
         }
     }
 
-    public static Circuit findTargetCircuit(RedstoneChips rc, CommandSender sender) {
+    public static List<Circuit> findTargetCircuit(RedstoneChips rc, CommandSender sender) {
         Player player = checkIsPlayer(rc, sender);
         if (player==null) return null;
 
         Block target = targetBlock(player);
-        Circuit c = rc.getCircuitManager().getCircuitByStructureBlock(target);
+        List<Circuit> c = rc.getCircuitManager().getCircuitByStructureBlock(target);
         if (c==null) {
             sender.sendMessage(rc.getPrefs().getErrorColor() + "You need to point at a block of a redstone chip.");
         }

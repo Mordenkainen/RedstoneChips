@@ -30,7 +30,7 @@ public class RCactivate extends RCCommand {
                 interfaceBlockType = rc.getPrefs().getInterfaceBlockType();
             } else {
                 if (args.length!=3) {
-                    sender.sendMessage(rc.getPrefs().getErrorColor() + "Bad syntax. Expecting /rccuboid activate [inputBlockType] [outputBlockType] [interfaceBlockType]");
+                    sender.sendMessage(rc.getPrefs().getErrorColor() + "Bad syntax. Expecting /rcactivate [inputBlockType] [outputBlockType] [interfaceBlockType]");
                     return true;
                 }
                 try {

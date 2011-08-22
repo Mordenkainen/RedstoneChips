@@ -1,6 +1,7 @@
 
 package org.tal.redstonechips.command;
 
+import java.util.List;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -19,13 +20,14 @@ public class RCtype extends RCCommand {
         if (player==null) return true;
         
         Block block = CommandUtils.targetBlock(player);
-        rcTypeReceiver t = rc.rcTypeReceivers.get(block.getLocation());
+        List<rcTypeReceiver> receiverList = rc.rcTypeReceivers.get(block.getLocation());
 
-        if (t==null) {
+        if (receiverList==null) {
             player.sendMessage(rc.getPrefs().getErrorColor() + "You must point towards a typing block (a terminal circuit's interface block for example) to type.");
         } else {
+            for (rcTypeReceiver receiver : receiverList)
+                receiver.type(args, player);
             player.sendMessage(rc.getPrefs().getInfoColor() + "Input sent.");
-            t.type(args, player);
         }
 
         return true;

@@ -16,7 +16,7 @@ public class RCreset extends RCCommand {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        Circuit c;
+        List<Circuit> c = new ArrayList<Circuit>();
 
         if (args.length>0) {
             if (args[0].equalsIgnoreCase("all")) {
@@ -28,11 +28,12 @@ public class RCreset extends RCCommand {
 
             try {
                 int id = Integer.decode(args[0]);
-                c = rc.getCircuitManager().getCircuits().get(id);
-                if (c==null) {
+                Circuit targetCircuit = rc.getCircuitManager().getCircuits().get(id);
+                if (targetCircuit==null) {
                     sender.sendMessage(rc.getPrefs().getErrorColor() + "Invalid circuit id: " + id + ".");
                     return true;
                 }
+                c.add(targetCircuit);
             } catch (NumberFormatException ne) {
                 sender.sendMessage(rc.getPrefs().getErrorColor() + "Bad argument: " + args[0] + ". Expecting a number.");
                 return true;
@@ -42,7 +43,9 @@ public class RCreset extends RCCommand {
             if (c==null) return true;
         }
 
-        rc.getCircuitManager().resetCircuit(c, sender);
+        List<Circuit> circuitList = new ArrayList<Circuit>(c);
+        for (Circuit curCircuit : circuitList)
+            rc.getCircuitManager().resetCircuit(curCircuit, sender);
 
         return true;
     }

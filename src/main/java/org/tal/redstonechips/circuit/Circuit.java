@@ -42,9 +42,9 @@ public abstract class Circuit {
     public InputPin[] inputs;
 
     /**
-     * Output blocks. List of lever block locations.
+     * Output blocks. List of lever block objects.
      */
-    public Location[] outputs;
+    public OutputPin[] outputs;
 
     /**
      * Contains the location of any block that is part of this circuit. When any block in this array is broken the circuit is destroyed.
@@ -250,21 +250,7 @@ public abstract class Circuit {
             ioDebug("Output " + outIdx + " is " + (state?"on":"off") + ": " + o + ".");
         }
 
-        changeLeverState(getOutputBlock(outIdx), state);
-    }
-
-    private void changeLeverState(Block lever, boolean level) {
-        if (!world.isChunkLoaded(lever.getChunk())) return;
-        
-        byte data = lever.getData();
-        byte newData = (byte)(level? data | 0x8 : data & 0x7);
-
-        try {
-            lever.setData(newData);
-        } catch (ConcurrentModificationException me) {
-            redstoneChips.log(Level.WARNING, "We had another concurrent modification at sendoutput.");
-            me.printStackTrace();
-        }
+        outputs[outIdx].sendOutput(this, state);
     }
 
     /**
@@ -445,8 +431,7 @@ public abstract class Circuit {
      * @return The lever block of the specific output index.
      */
     protected Block getOutputBlock(int outputIdx) {
-        Location l = outputs[outputIdx];
-        return world.getBlockAt(l);
+        return world.getBlockAt(outputs[outputIdx].getOutputBlock());
     }
 
     /**
@@ -473,7 +458,7 @@ public abstract class Circuit {
             i.refreshPowerBlocks();
 
         for (int i=0; i<outputs.length; i++)
-            changeLeverState(getOutputBlock(i), outputBits.get(i));
+            outputs[i].sendOutput(this, outputBits.get(i));
     }
 
     /**
@@ -547,9 +532,9 @@ public abstract class Circuit {
             }
         }
 
-        for (Location o : outputs) {
+        for (OutputPin o : outputs) {
             // output chunks
-            Block leverBlock = o.getBlock();
+            Block leverBlock = world.getBlockAt(o.getOutputBlock());
             Lever l = new Lever(leverBlock.getType(), leverBlock.getData());
             Block output = leverBlock.getFace(l.getAttachedFace());
 
@@ -635,13 +620,13 @@ public abstract class Circuit {
     public boolean checkIntegrity() {
         List<Location> checked = new ArrayList<Location>();
 
-        for (Location o : outputs) {
+        for (OutputPin o : outputs) {
             // expect lever
-            if (world.getBlockTypeIdAt(o)!=Material.LEVER.getId()) {
-                redstoneChips.log(Level.WARNING, "Circuit " + id + ": Output lever is missing at " + o.getBlockX() + "," + o.getBlockY() + ", " + o.getBlockZ() + ".");
+            if (world.getBlockTypeIdAt(o.getOutputBlock())!=Material.LEVER.getId()) {
+                redstoneChips.log(Level.WARNING, "Circuit " + id + ": Output lever is missing at " + o.getOutputBlock().getBlockX() + "," + o.getOutputBlock().getBlockY() + ", " + o.getOutputBlock().getBlockZ() + ".");
                 return false;
             } else
-                checked.add(o);
+                checked.add(o.getOutputBlock());
         }
 
         if (world.getBlockTypeIdAt(activationBlock)!=Material.WALL_SIGN.getId()) {
@@ -663,7 +648,7 @@ public abstract class Circuit {
     }
 
     public void resetOutputs() {
-        for (Location output : outputs)
-            this.changeLeverState(output.getBlock(), false);
+        for (OutputPin output : outputs)
+            output.sendOutput(this, false);
     }
 }
